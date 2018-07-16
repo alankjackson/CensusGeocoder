@@ -1,0 +1,160 @@
+---
+title: "Test Platform for CensusGeocoder"
+author: "Alan Jackson"
+date: "July 15, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Create test data
+
+Create two test datasets, one that should work, and one with failure cases
+
+```{r Test Data}
+
+##  good
+
+good_data <- c("10599 KIBER DR", "HOUSTON", "TX", "77031",
+               "6499 ROOS RD", "HOUSTON", "TX", "77074",
+               "1199 PIERCE ST", "HOUSTON", "TX", "77002",
+               "5000 N Shepherd Dr", "Houston", "TX","77018",
+               "5000 S Shepherd Dr", "Houston", "TX", "77098",
+               "1000 E Tidwell Rd", "Houston", "TX", "77022",
+               "1000 W Tidwell Rd", "Houston", "TX", "77091" 
+               )
+good_data <- cbind.data.frame(split(good_data, rep(1:4, times=length(good_data)/4)), stringsAsFactors=F)
+names(good_data) <- c("address", "city", "state", "zip")
+
+## bad
+
+bad_data <- c( "3299 UNITY DR", "HOUSTON", "TX", "77057",
+               "7499 MEMORIAL WOODS DR", "HOUSTON", "TX", "77024",
+               "8699 LA FONTE ST", "HOUSTON", "TX", "77024",
+               "6799 S BRAESWOOD BLVD", "HOUSTON", "TX", "77031",
+               "1399 CHIMNEY ROCK RD", "HOUSTON", "TX", "77056",
+               "999 LAMAR ST", "HOUSTON", "TX", "77002",
+               "1699 PIERCE ST", "HOUSTON", "TX", "77003")
+
+bad_data <- cbind.data.frame(split(bad_data, rep(1:4, times=length(bad_data)/4)), stringsAsFactors=F)
+names(bad_data) <- c("address", "city", "state", "zip")
+
+##Error in (function (..., row.names = NULL, check.rows = FALSE, check.names TRUE,  : 
+##  arguments imply differing number of rows: 1, 0
+##[1] "attempted 2"
+
+```
+
+##  Just the function Ma'am
+
+The singular function, Census_decoder
+
+Call sequence is
+
+* address (required): street number and street name (1234 N Main ST)
+* city (optional): City name. If both city and zip are given, they may conflict.
+* state (optional): State 2-letter postal abbreviation
+* zip (optional): 5 digit US Postal Zipcode
+
+Either city and state, or zip is required
+
+
+```{r census decoder}
+
+Census_decoder <- function(address, city=NA, state=NA, zip=NA){
+ 
+  #  required libraries 
+  
+  require(jsonlite)
+  require(httr)
+  
+  print(paste(address, city, state, zip)) 
+  urlreq <- paste0("https://geocoding.geo.census.gov/geocoder/geographies/address?street=",gsub(" ", "+",address))
+  if (!is.na(city)){urlreq <- paste0(urlreq,"&city=", city)}
+  if (!is.na(state)){urlreq <- paste0(urlreq,"&state=", state)}
+  if (!is.na(zip)){urlreq <- paste0(urlreq,"&zip=", zip)}
+  urlreq <- paste0(urlreq,"&benchmark=Public_AR_Current&vintage=Current_Current&format=json")
+  print(paste("===>",urlreq))
+  
+  #   set up to retry twice on error (which usually works)
+  attempt <- 1
+  while(answer$status_code!=200 && attempt<=3 ) {
+    if (attempt>1){print(paste("attempted", attempt))}
+    attempt <- attempt + 1
+    try(
+      #     Go get result
+      answer <- httr::GET(urlreq)
+    )
+  }
+  #     did we succeed?
+  
+  ##############################
+  r <- httr::GET(url_full)
+  httr::stop_for_status(r)
+  response <- httr::content(r)
+  if (length(response$result$addressMatches) == 0) {
+    message(paste0("Address (",
+                   street, " ", city, " ", state,
+                   ") returned no address matches. An NA was returned."))
+    return(NA_character_)
+  } else {
+    if (length(response$result$addressMatches) > 1) {
+      message(paste0("Address (",
+                     street, " ", city, " ", state,
+                     ") returned more than one address match. The first match was returned."))
+    }
+    return(response$result$addressMatches[[1]]$geographies$`Census Blocks`[[1]]$GEOID)
+  }
+  
+  
+  ##############################
+  #lon <- as.character(json_file[["result"]][["addressMatches"]][["coordinates"]][["x"]])
+  #lat <- as.character(json_file[["result"]][["addressMatches"]][["coordinates"]][["y"]])
+  #block <-json_file[["result"]][["addressMatches"]][["geographies"]][["2010 Census Blocks"]][[1]][["BLOCK"]]
+  #tract <- json_file[["result"]][["addressMatches"]][["geographies"]][["Census Tracts"]][[1]][["TRACT"]]
+  #match_address <- json_file[["result"]][["addressMatches"]][["matchedAddress"]]
+  
+  #print(paste("output", lat, lon, block, tract, match_address))
+  
+  
+  
+}
+
+```
+
+##   Test function
+
+```{r test function}
+
+#---------------------------
+# Good data - test with various optional pieces
+#---------------------------
+
+#  Full address
+
+for (i in 1:nrow(good_data)) {
+  #print(paste(i,"--->",good_data[i,]))
+  test1 <- Census_decoder(good_data[i,]$address, 
+                 good_data[i,]$city,
+                 good_data[i,]$state)
+  test2 <- Census_decoder(good_data[i,]$address, 
+                 good_data[i,]$city,
+                 good_data[i,]$state,
+                 good_data[i,]$zip)
+  test5 <- Census_decoder(address=good_data[i,]$address, 
+                 zip=good_data[i,]$zip)
+  print(test1)
+  print(test2)
+  print(test3)
+  print(test4)
+  print(test5)
+}
+
+
+```
+
